@@ -17,3 +17,6 @@ dist/
 # stuffs that airflow output during runtime
 logs/
 unittests.cfg
+
+# airflow auto generates this.
+webserver_config.py
