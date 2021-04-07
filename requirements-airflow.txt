@@ -1,8 +1,8 @@
-apache-airflow[postgres]==1.10.8
-cryptography==3.3.2
-pandas==1.0.0
-pendulum==1.4.4
-pyarrow==0.16.0
-pyspark==2.4.3
-python-snappy==0.5.4
-werkzeug==0.16.1
+apache-airflow[postgres]==2.0.1
+cryptography==3.4.7
+pandas==1.2.3
+pendulum==2.1.2
+pyarrow==3.0.0
+pyspark==3.1.1
+python-snappy==0.6.0
+werkzeug==1.0.1
