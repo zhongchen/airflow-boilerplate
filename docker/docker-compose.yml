@@ -1,78 +1,153 @@
 version: '3.7'
-#x-airflow-common: &airflow-common
-#  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.0.1}
-#  environment: &airflow-common-env
-#    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-#    AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-#    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
-#    AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
-#    AIRFLOW__CORE__FERNET_KEY: ''
-#    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
-#    AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
-#  volumes:
-#    - ./dags:/opt/airflow/dags
-#    - ./logs:/opt/airflow/logs
-#    - ./plugins:/opt/airflow/plugins
-#  user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-50000}"
-#  depends_on:
-#    redis:
-#      condition: service_healthy
-#    postgres:
-#      condition: service_healthy
+x-airflow-common: &airflow-common
+  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.0.1}
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+    AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
+    AIRFLOW__CORE__FERNET_KEY: 'mkA0ggJccF5BSlGBIY5adyXAyPqpYizW9KhdJFjgdaQ='
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
+  volumes:
+    - ../dags:/opt/airflow/dags
+    - ../logs:/opt/airflow/logs
+    - ../plugins:/opt/airflow/plugins
+  user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-50000}"
+  depends_on:
+    redis:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
 
 services:
-  airflow_postgres:
-    image: postgres:9.6.2
+  postgres:
+    image: postgres:13
     environment:
-      - POSTGRES_USER=airflow
-      - POSTGRES_PASSWORD=airflow
-      - POSTGRES_DB=airflow
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
     volumes:
-      - "airflow_dbdata:/var/lib/postgresql/data"
+      - postgres-db-volume:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
-
-  airflow_initdb:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    depends_on:
-      - airflow_postgres
-    volumes:
-      - ../airflow.cfg:/usr/local/airflow/airflow.cfg
-      - ../variables:/usr/local/airflow/variables
-    command:
-      - /bin/bash
-      - -c
-      - |
-        airflow initdb
-        if [[ -e /usr/local/airflow/variables/dev/all.json ]]; then
-            airflow variables -i /usr/local/airflow/variables/dev/all.json
-        fi
-        # Enable this if you choose to have RBAC UI activated in the webserver
-        # airflow create_user -r Admin -u airflow -e airflow@airflow.com -f Air -l Flow -p airflow
-
-  airflow_webserver:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    restart: always
-    depends_on:
-      - airflow_initdb
-    volumes:
-      - ../airflow.cfg:/usr/local/airflow/airflow.cfg
-      - ../dags:/usr/local/airflow/dags
-      - ../plugins:/usr/local/airflow/plugins
-      - ./spark-conf:/spark-conf
-    ports:
-      - "8080:8080"
-      - "4040:4040"
-    command: webserver
+      - 5432:5432
     healthcheck:
-      test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
-      interval: 30s
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+    restart: always
+
+  redis:
+    image: redis:latest
+    ports:
+      - 6379:6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
       timeout: 30s
-      retries: 3
+      retries: 50
+    restart: always
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - 8080:8080
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: always
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    restart: always
+
+  airflow-worker:
+    <<: *airflow-common
+    command: celery worker
+    restart: always
+
+  airflow-init:
+    <<: *airflow-common
+    command: version
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_UPGRADE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+
+  flower:
+    <<: *airflow-common
+    command: celery flower
+    ports:
+      - 5555:5555
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:5555/"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: always
 
 volumes:
-  airflow_dbdata:
+  postgres-db-volume:
+
+#services:
+#  airflow_postgres:
+#    image: postgres:9.6.2
+#    environment:
+#      - POSTGRES_USER=airflow
+#      - POSTGRES_PASSWORD=airflow
+#      - POSTGRES_DB=airflow
+#    volumes:
+#      - "airflow_dbdata:/var/lib/postgresql/data"
+#    ports:
+#      - "5432:5432"
+#
+#  airflow_initdb:
+#    build:
+#      context: ..
+#      dockerfile: docker/Dockerfile
+#    depends_on:
+#      - airflow_postgres
+#    volumes:
+#      - ../airflow.cfg:/usr/local/airflow/airflow.cfg
+#      - ../variables:/usr/local/airflow/variables
+#    command:
+#      - /bin/bash
+#      - -c
+#      - |
+#        airflow initdb
+#        if [[ -e /usr/local/airflow/variables/dev/all.json ]]; then
+#            airflow variables -i /usr/local/airflow/variables/dev/all.json
+#        fi
+#        # Enable this if you choose to have RBAC UI activated in the webserver
+#        # airflow create_user -r Admin -u airflow -e airflow@airflow.com -f Air -l Flow -p airflow
+#
+#  airflow_webserver:
+#    build:
+#      context: ..
+#      dockerfile: docker/Dockerfile
+#    restart: always
+#    depends_on:
+#      - airflow_initdb
+#    volumes:
+#      - ../airflow.cfg:/usr/local/airflow/airflow.cfg
+#      - ../dags:/usr/local/airflow/dags
+#      - ../plugins:/usr/local/airflow/plugins
+#      - ./spark-conf:/spark-conf
+#    ports:
+#      - "8080:8080"
+#      - "4040:4040"
+#    command: webserver
+#    healthcheck:
+#      test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
+#      interval: 30s
+#      timeout: 30s
+#      retries: 3
+#
+#volumes:
+#  airflow_dbdata:

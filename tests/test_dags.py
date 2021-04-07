@@ -9,7 +9,7 @@ def test_import_errors(dag_bag):
         - The DAGs are indeed acyclic
             DagBag.bag_dag() checks for dag.test_cycle()
     """
-    assert len(dag_bag.import_errors) == 1
+    assert len(dag_bag.import_errors) == 0
 
 
 def test_dags_has_task(dag_bag):

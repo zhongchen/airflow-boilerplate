@@ -7,7 +7,6 @@ from operators.something_to_something_operator import SomethingToSomethingOperat
 
 from common.stringcase import snake_case
 
-
 default_args = {
     "owner": "airflow",
     "start_date": "2020-05-13",
