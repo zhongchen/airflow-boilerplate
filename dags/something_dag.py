@@ -3,9 +3,10 @@ from datetime import timedelta
 from airflow import DAG
 from airflow.operators.dummy_operator import DummyOperator
 
-from airflow.operators.something_plugin import SomethingToSomethingOperator
+from operators.something_to_something_operator import SomethingToSomethingOperator
 
 from common.stringcase import snake_case
+
 
 default_args = {
     "owner": "airflow",
