@@ -10,9 +10,9 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
   volumes:
-    - ../dags:/opt/airflow/dags
-    - ../logs:/opt/airflow/logs
-    - ../plugins:/opt/airflow/plugins
+    - ../dags:/usr/local/airflow/dags
+    - ../logs:/usr/local/airflow/logs
+    - ../plugins:/usr/local/airflow/plugins
   user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-50000}"
   depends_on:
     redis:
@@ -51,13 +51,15 @@ services:
   airflow-webserver:
     <<: *airflow-common
     command: webserver
+    depends_on:
+      - airflow-init
     ports:
       - 8080:8080
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
+#    healthcheck:
+#      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+#      interval: 10s
+#      timeout: 10s
+#      retries: 5
     restart: always
 
   airflow-scheduler:
@@ -96,17 +98,6 @@ volumes:
   postgres-db-volume:
 
 #services:
-#  airflow_postgres:
-#    image: postgres:9.6.2
-#    environment:
-#      - POSTGRES_USER=airflow
-#      - POSTGRES_PASSWORD=airflow
-#      - POSTGRES_DB=airflow
-#    volumes:
-#      - "airflow_dbdata:/var/lib/postgresql/data"
-#    ports:
-#      - "5432:5432"
-#
 #  airflow_initdb:
 #    build:
 #      context: ..

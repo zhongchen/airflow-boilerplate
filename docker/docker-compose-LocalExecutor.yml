@@ -1,0 +1,59 @@
+version: '3.7'
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+    restart: always
+
+  airflow_initdb:
+    image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.0.1}
+    depends_on:
+      - postgres
+    volumes:
+      - ../airflow.cfg:/usr/local/airflow/airflow.cfg
+      - ../variables:/usr/local/airflow/variables
+    command:
+      - /bin/bash
+      - -c
+      - |
+        airflow db init
+        if [[ -e /usr/local/airflow/variables/dev/all.json ]]; then
+            airflow variables -i /usr/local/airflow/variables/dev/all.json
+        fi
+        # Enable this if you choose to have RBAC UI activated in the webserver
+        # airflow create_user -r Admin -u airflow -e airflow@airflow.com -f Air -l Flow -p airflow
+
+  airflow_webserver:
+    image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.0.1}
+    restart: always
+    depends_on:
+      - airflow_initdb
+    volumes:
+      - ../airflow.cfg:/usr/local/airflow/airflow.cfg
+      - ../dags:/usr/local/airflow/dags
+      - ../plugins:/usr/local/airflow/plugins
+      - ./spark-conf:/spark-conf
+    ports:
+      - "8080:8080"
+      - "4040:4040"
+    command: webserver
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+
+volumes:
+  postgres-db-volume:
